@@ -2,19 +2,27 @@
  
 ## Index
 [1. Introduction](#Intro)
+
 [2. Brief Introduction to the challenge](#Challenge)
+
 [3. Goal of the challenge](#Goal)
+
 [4. Benchmark](#Mark)
+
 [5. Idea](#Idea)
+
 [6. Ranking](#Rank)
+
 [7. Possible Improvements](#Improv)
 
 <a name="Intro">
+ 
 ## 1. Intoduction
 
 This is a class project I made aiming to solve the [Regional CLimate Forecasting challenge](https://challengedata.ens.fr/participants/challenges/80/) on challengedata. I've ended up with 4th place on the public scoreboard and 1st place on the private one. Here I will give the idea of the solution and possible ways to improve my solution.
 
 <a name="#Challenge">
+ 
 ## 2. Brief Introduction to the challenge
 
 The goal is to predict regional temperature anomaly given the data of the last 10 years together with the 11-year predictions of other 22 models.
@@ -22,6 +30,7 @@ The goal is to predict regional temperature anomaly given the data of the last 1
 The regions are given by the nested Healpix(one may check [link](https://en.wikipedia.org/wiki/HEALPix) for the disctription of Healpix), which is a way to partition the global into smaller zones. Here we will partition into 3072 regions.
 
 <a name="#Goal">
+ 
 ## 3. Goal of the challenge
 
 The input data $X$ is then given for each zone $k\in$ {0, ..., 3071} a set of $22\times 11+10=252$ variables denoted by $MY_{i, j}$, where $i\in$ {0, ..., 22} corresponds to the index of the model(0 will be the observation) and $j$ between 9 or 10 depending on the value of $i$. The aim to predict the average temperature of the scale-down region, which will be the consecutive 16 points of in the original division.
@@ -33,11 +42,13 @@ The output should have the same number of rows as of $Y$, and each row with two 
 The goal is thus to predict $Y$ given $X$ so that both the prediction is close and the variance is low.
 
 <a name="#Mark">
+ 
 ## 4. Benchmark
 
 The benchmark of this challenge is the loss obtained by taking the last observed data $MY_{0, 9}$ as prediction which is -1.139 on the public dataset and -1.212 on the private data set.
 
 <a name="#Idea">
+ 
 ## 5. Idea
 
 Since the dimension is way too large to be able to treated directly, the first task is to try to reduce the dimensionality. 
@@ -51,6 +62,7 @@ To do this, we will calculate the loss seperately for each dataset, so that we w
 Unfortunately, after some tries I cannot improve the results better than the pure mean of the models 0, 5, 8. 
 
 <a name="#Rank">
+ 
 ## 6. Ranking
 
 On public ranking, here we only consider the data of models 0, 5, 8
@@ -66,6 +78,7 @@ On private ranking,
 </ul>
 
 <a name="#Improv">
+ 
 ## 7. Possible Improvements
 
 I believe there should be a lot to improve on my current result. 
