@@ -12,7 +12,7 @@ The regions are given by the nested Healpix(one may check [link](https://en.wiki
 
 ## 3. Goal of the challenge
 
-The input data $X$ is then given for each zone $k\in$ {$0, \dots, 3071$} a set of $22\times 11+10=252$ variables denoted by $MY_{i, j}$, where $i\in\{0, \dots, 22\}$ corresponds to the index of the model(0 will be the observation) and $j$ between 9 or 10 depending on the value of $i$. The aim to predict the average temperature of the scale-down region, which will be the consecutive 16 points of in the original division.
+The input data $X$ is then given for each zone $k\in$ {0, ..., 3071} a set of $22\times 11+10=252$ variables denoted by $MY_{i, j}$, where $i\in$ {0, ..., 22} corresponds to the index of the model(0 will be the observation) and $j$ between 9 or 10 depending on the value of $i$. The aim to predict the average temperature of the scale-down region, which will be the consecutive 16 points of in the original division.
 
 The target $Y$ will be the average temperature of the scale-down region, which is each of the 16 consecutive zones in the original division.
 
