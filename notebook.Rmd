@@ -1,0 +1,449 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Start with importing the libraries.
+```{r}
+rm(list=objects())
+library(XML)
+library(RCurl)
+library(magrittr)
+library(mgcv)
+library(tidyverse)
+library(lubridate)
+library(weathermetrics)
+library(ranger)
+```
+
+Appendix: Some functions that migth be useful.
+```{r}
+mean_scale_down <- function(data){
+  data_reshaped <- matrix(train_X_latest, nrow = 960, 
+                                  ncol = 16, byrow=T)
+  return(rowMeans(data_reshaped))
+}
+
+select_data <- function(data, dataset, model, position){
+  return(which(data$DATASET == dataset & data$MODEL==model & data$POSITION==position))
+}
+```
+
+Now we can import the data.
+```{r}
+train_X <- read_delim("./climate_data/train_X_bi3kZtl_HpFoQzd.csv", col_names = T, delim=',')
+train_Y <- read_delim("./climate_data/train_Y_YuFWD9r_L2f1EvL.csv", col_names = T, delim=',')
+Coordinates <- read_delim("../example/lon_and_lat.txt", col_names = T, delim = ',')
+test_X <- read_delim("./climate_data/test_X_PrBOtR0_kr21GXn.csv", col_names = T,
+                     delim=',')
+train_X$DATASET <- as.integer(train_X$DATASET)
+train_X$MODEL <- as.integer(train_X$MODEL)
+train_X$TIME <- as.integer(train_X$TIME)
+train_X$POSITION <- as.integer(train_X$POSITION)
+train_X$VALUE <- as.numeric(train_X$VALUE)
+test_X$DATASET <- as.integer(test_X$DATASET)
+test_X$MODEL <- as.integer(test_X$MODEL)
+test_X$TIME <- as.integer(test_X$TIME)
+test_X$POSITION <- as.integer(test_X$POSITION)
+test_X$VALUE <- as.numeric(test_X$VALUE)
+train_Y_dup <- rep(train_Y$MEAN, each = 16)
+```
+
+Reshape the data.
+```{r}
+#DATA <- rep(c(1:5), each=3072)
+#POS <- rep(c(0:3071),5)
+X <- data.frame(POS=rep(c(0:3071),5), DATA=rep(c(0:4), each=3072))
+for(i in c(0:22)){
+  if(i == 0) k<-9
+  else k<- 10
+  for(j in c(0:k)){
+    sel <- which(train_X$TIME == j & train_X$MODEL==i)
+    model_value <- train_X[sel,]$VALUE
+    length(model_value)
+    eval(parse(text = paste("X$M",i,"Y",j,"<-model_value",sep="")))
+  }
+}
+Xt <- data.frame(POS=rep(c(0:3071),2), DATA=rep(c(0:1), each=3072))
+for(i in c(0:22)){
+  if(i == 0) k<-9
+  else k<- 10
+  for(j in c(0:k)){
+    sel <- which(test_X$TIME == j & test_X$MODEL==i)
+    model_value <- test_X[sel,]$VALUE
+    length(model_value)
+    eval(parse(text = paste("Xt$M",i,"Y",j,"<-model_value",sep="")))
+  }
+}
+X$LON <- Coordinates$LON/360
+X$LAT <- Coordinates$LAT/90
+Xt$LON <- Coordinates$LON/360
+Xt$LAT <- Coordinates$LAT/90
+X$Y <- train_Y_dup
+```
+
+```{r}
+sel <- which(X["DATA"] == 4)
+valX <- X[sel, ]
+trainX <- X[-sel,]
+```
+
+```{r}
+vt <- c(1:9)
+nx <- 24
+train_X <- train_X %>% arrange(POSITION)
+val_X <- train_X[which(train_X["DATASET"]==4), ]
+sel0 <- which(train_X["MODEL"] == 0 & train_X["DATASET"] < 4)
+sel5 <- which(train_X["MODEL"] == 5 & train_X["DATASET"] < 4 & train_X["TIME"]<10)
+sel8 <- which(train_X["MODEL"] == 8 & train_X["DATASET"] < 4 & train_X["TIME"]<10)
+val_sel0 <- which(val_X["MODEL"] == 0)
+val_sel5 <- which(val_X["MODEL"]==5 & val_X["TIME"]<10)
+val_sel8 <- which(val_X["MODEL"]==8 & val_X["TIME"]<10)
+listM0 <- (train_X[sel0, ]$VALUE+train_X[sel5, ]$VALUE+train_X[sel8, ]$VALUE)/3
+stdM0 <- sqrt(var(listM0))
+val_listM0 <- (val_X[val_sel0, ]$VALUE+val_X[val_sel5, ]$VALUE + val_X[val_sel8, ]$VALUE)/3
+val_std <- sqrt(var(val_listM0))
+dx <- 6*stdM0/nx
+xmax <- max(abs(listM0))+1e-8
+vxp <- c(0:(nx/2))*dx
+vxp[length(vxp)] <- xmax
+vx <- c(rev(vxp)*(-1), vxp[2:length(vxp)])
+val_dx <- 6*val_std/nx
+val_xmax <- max(abs(val_listM0))+1e-8
+val_vxp <- c(0:(nx/2))*val_dx
+val_vxp[length(val_vxp)] <- val_xmax
+val_vx <- c(rev(val_vxp)*(-1), val_vxp[2:length(val_vxp)])
+
+Niobs <- rep(0, nx)
+for(i in c(1:length(vx)-1)){
+  sel <- which((listM0>vx[i]) & (listM0 <= vx[i+1]))
+  Niobs[i] <- length(sel)
+}
+
+Niobsn <- Niobs/sum(Niobs)
+Xp <- vxp[1:length(vxp)-1]+0.5*dx
+XX <- c(rev(Xp)*(-1), Xp)
+bp<-barplot(Niobsn*100)
+print(bp)
+  
+```
+
+```{r}
+for(it in vt){
+  count <- 0;VALi <- c();VALf <- c(); data <- 0
+  for(jiter in c(1:(length(listM0)/10))){
+    beg <- (jiter-1)*10+1
+    POS <- beg%/%40
+    data <- data %% 4
+    len <- 9
+    count <- count + len
+    VALi <- c(VALi, listM0[beg:(beg+len-it)])
+    VALi <- c(VALi, listM0[beg+len-it+1])
+    VALf <- c(VALf, listM0[(beg+it):(beg+len)])
+    sel <- which(train_Y$POSITION == (POS%/%16) & train_Y$DATASET == data)
+    VALf <- c(VALf, train_Y[sel,]$MEAN)
+  }
+  A <- matrix(rep(0, nx*nx), nrow = nx)
+  for(i in c(1:length(vx)-1)){
+    ind<-which((VALi>vx[i]) & (VALi<=vx[i+1]))
+    Ni<-length(ind)
+    VALff <- VALf[ind]
+    for(ii in c(1:length(vx)-1)){
+      Nf <- sum((VALff>vx[ii])&(VALff<=vx[ii+1]))
+      A[ii, i]<-Nf/Ni
+    }
+  }
+  assign(paste("AM0Delta", it, sep=""), A)
+}
+```
+Apply the method above but with the transition matrices calculated according to the regions.
+```{r}
+
+```
+Plotting the results.
+```{r}
+val_X <- train_X[which(train_X["DATASET"]==4), ]
+Xval <- trainX[which(trainX["DATA"]<4),]$Y
+Y_grid <- c(0)
+valY_grid <- c(0)
+for(i in c(1:length(vx)-1)){
+  Y_grid[i] <- sum((Xval>vx[i]) & (Xval <= vx[i+1]))
+  valY_grid[i] <- sum(valX$Y>val_vx[i] & valX <= val_vx[i+1])
+}
+Y_grid_per <- Y_grid/sum(Y_grid)
+valY_grid_per <- valY_grid/sum(valY_grid)
+train_df <- data.frame(Y = Y_grid_per)
+val_df <- data.frame(Y = valY_grid_per)
+#barplot(Y_grid_per*100, main = "Observation Barplot")
+for(i in vt){
+  sel0<-which(train_X["MODEL"]==0 & train_X["DATASET"]<4 & train_X["TIME"] == 10-i)
+  sel5 <- which(train_X["MODEL"]==5 & train_X["DATASET"]<4 & train_X["TIME"] == 10-i)
+  sel8 <- which(train_X["MODEL"]==8 & train_X["DATASET"]<4 & train_X["TIME"] == 10-i)
+  val_sel0<-which(val_X["MODEL"]==0 & val_X["TIME"] == 10-i)
+  val_sel5<-which(val_X["MODEL"]==5 & val_X["TIME"] == 10-i)
+  val_sel8<-which(val_X["MODEL"]==8 & val_X["TIME"] == 10-i)
+  
+  llist <- (train_X[sel0, ]$VALUE+train_X[sel5, ]$VALUE+train_X[sel8, ]$VALUE)/3
+  val_llist <- (val_X[val_sel0, ]$VALUE+val_X[val_sel5, ]$VALUE+val_X[val_sel8, ]$VALUE)/3
+  Obs <- rep(0, nx)
+  val_Obs <- rep(0, nx)
+  for(ii in 1:nx){
+    Obs[ii] <- sum((llist>vx[ii]) & (llist <= vx[ii+1]))
+    val_Obs[ii] <- sum((val_llist>val_vx[ii]) & (val_llist <= val_vx[ii+1]))
+  }
+  Obs_per <- matrix(Obs/sum(Obs), ncol = 1)
+  val_Obs_per <- matrix(val_Obs/sum(val_Obs), ncol = 1)
+  eval(parse(text = paste("Obs_per_new<-c(AM0Delta", i, " %*% Obs_per)", sep="")))
+  eval(parse(text = paste("val_Obs_per_new<-c(AM0Delta", i, " %*% val_Obs_per)", sep="")))
+  eval(parse(text = paste("train_df$ObsDelta", i, "<-Obs_per_new", sep="")))
+  eval(parse(text = paste("val_df$ObsDelta", i, "<-val_Obs_per_new", sep="")))
+  #barplot(Obs_per_new*100, main=paste("Prediction in", i, "years", sep = " "))
+  p<-ggplot(mapping = aes(x, y)) +
+  ggtitle(paste("Prediction in", i, "years", sep = " "))+
+  geom_bar(data = data.frame(x = 1:nx, y = Y_grid_per*100), stat = 'identity') +
+  geom_bar(data = data.frame(x = 1:nx, y = Obs_per_new*100), width = 0.4, stat = 'identity', fill = 'red')+
+    geom_vline(xintercept = nx/2)+
+    geom_vline(xintercept = nx/2-nx/6)+
+    geom_vline(xintercept = nx/2-2*nx/6)+
+    geom_vline(xintercept = nx/2+nx/6)+
+    geom_vline(xintercept = nx/2+2*nx/6)
+  print(p)
+  p1<-ggplot(mapping = aes(x, y)) +
+  ggtitle(paste("Prediction in", i, "years Validation", sep = " "))+
+  geom_bar(data = data.frame(x = 1:nx, y = valY_grid_per*100), stat = 'identity') +
+  geom_bar(data = data.frame(x = 1:nx, y = val_Obs_per_new*100), width = 0.4, stat = 'identity', fill = 'red')+
+    geom_vline(xintercept = nx/2)+
+    geom_vline(xintercept = nx/2-nx/6)+
+    geom_vline(xintercept = nx/2-2*nx/6)+
+    geom_vline(xintercept = nx/2+nx/6)+
+    geom_vline(xintercept = nx/2+2*nx/6)
+  print(p1)
+}
+```
+```{r}
+X_arranged <- X%>%arrange(POS)
+val_list <- X_arranged$Y
+sel0 <- which(train_X["MODEL"] == 0)
+sel5 <- which(train_X["MODEL"] == 5 & train_X["TIME"]<10)
+sel8 <- which(train_X["MODEL"] == 8 & train_X["TIME"]<10)
+val_llist <- (train_X[sel0, ]$VALUE+train_X[sel5, ]$VALUE+train_X[sel8, ]$VALUE)/3
+for(i in c(1:length(vx)-1)){
+  sel <- which(vx[i] < val_list & val_list <= vx[i+1])
+  veci<-rep(0, nx)
+  veci[i] <- 1
+  val_list[sel] <- rep(veci, length(sel))
+  sel <- which(vx[i] < val_llist & val_llist <= vx[i+1])
+  val_llist[sel]<-rep(veci, length(sel))
+}
+val_llist <- matrix(val_llist, ncol=10, byrow = TRUE)
+train_df <- data.frame(Y=val_list)
+mat_mult <- function(A, x){
+  xx<-matrix(x, ncol=1)
+  return(A%*%xx)
+}
+for(i in 2:10){
+  eval(parse(text = paste("A<-AM0Delta", 11-i, sep="")))
+  
+  val_llist[, i] <- map(val_list[, i], function(x) mat_mult(A, x))
+  eval(parse(text = paste("X$AVGDelta", 11-i, "<-val_llist[,", i, "]", sep="")))
+}
+```
+
+```{r}
+
+```
+
+Reduce the dimension with PCA.
+
+```{r}
+pca_res <- prcomp(trainX[, -c(1, 2, 257)], center = T, scale.=T, retx = T)
+trainX_transformed <- predict(pca_res, newdata = trainX[, -c(1, 2, 257)])
+valX_transformed <- predict(pca_res, newdata = valX[, -c(1, 2, 257)])
+summary(pca_res)
+tail(trainX_transformed[, c(1, 2)])
+```
+
+Some data visualization, first one is with the Model1 and the temperature trend over the ten years in the first 4 positions.
+```{r}
+sel<-which(train_X$MODEL == 1 & train_X$POSITION %in% 1:16 & train_X$DATASET == 0)
+model <- train_X[sel,]
+model_pos1 <- model[which(model$POSITION == 1),]
+plot(model[which(model$POSITION == 1), ]$VALUE , type='l', ylim = c(-0.3, 0.3))
+lines(model[which(model$POSITION == 2), ]$VALUE, col = "blue")
+lines(model[which(model$POSITION == 3), ]$VALUE, col = "red")
+lines(model[which(model$POSITION == 4), ]$VALUE, col = "green")
+```
+This second one is the prediction of the first two models at the same position over ten years.
+```{r}
+sel <- select_data(train_X, 0, 0, 0)
+plot(train_X[sel,]$VALUE, type = 'l', ylim=c(-0.4,0.4), xlim=c(1, 11))
+for(i in c(1:22)){
+  sel <- select_data(train_X, 0, i, 0)
+  lines(train_X[sel,]$VALUE, lwd=0.1*i)
+}
+```
+A histogram of the mean to see the distribution.
+```{r}
+hist(train_Y$MEAN, breaks = 50)
+```
+
+We would then like to start with the simple linear regression only on the observed data(i.e. MODEL == 0).
+
+We will also have extra interest on the latest data observed, so we will do some extra work on it, and delete some outliers that seem to be disturbing.
+```{r}
+sel9 <- which(train_X$MODEL==0&train_X$TIME==9)
+train_X_latest <- train_X[sel9,]$VALUE
+train_X_latest_reshaped <- matrix(train_X_latest, nrow = 960, 
+                                  ncol = 16, byrow=T)
+train_X_latest_mean_by_pos <- rowMeans(train_X_latest_reshaped)
+outlier_sel <- which(train_X_latest_mean_by_pos <= 2)
+train_X_latest_mean_by_pos_fixed <- train_X_latest_mean_by_pos[outlier_sel]
+```
+
+A quick look at the relation between the latest data and the present data.
+```{r}
+for(i in c(1:5)){
+  vec <- (192*(i-1)+1):(192*i)
+plot(train_X_latest_mean_by_pos_fixed[vec], train_Y[outlier_sel,]$MEAN[vec])
+}
+```
+
+Now we look at three models using linear regression
+```{r}
+lm1<- lm(Y ~ M0Y9, data = X)
+all <- paste("M0Y", c(0:9), sep="", collapse="+")
+form<-as.formula(paste("Y~",all,"+POS",sep=""))
+lm2 <- lm(form, data = X)
+all <- paste("M", rep(c(0:22), 10), "Y", rep(c(0:9),each=23), sep="", collapse="+")
+all2 <- paste("M", c(1:22), "Y10", sep="", collapse="+")
+form<-as.formula(paste("Y~", all,"+",all2, sep = ""))
+lm3 <- lm(form, data = X)
+
+form4 <- as.formula(paste("Y~", all, "+", all2, "+LON+LAT", sep=""))
+lm4 <- lm(form4, data = X)
+
+#summary(lm1)
+#summary(lm2)
+summary(lm3)
+summary(lm4)
+```
+
+Let's plot the result of 1 and 3.
+```{r}
+lm1.fit_scale_down <- mean_scale_down(lm1$fitted)
+for(i in c(1:5)){
+  vec <- (192*(i-1)+1):(192*i)
+  plot(train_X_latest_mean_by_pos_fixed[vec], train_Y[outlier_sel,]$MEAN[vec])
+  lines(train_X_latest_mean_by_pos_fixed[vec], lm3$fitted[vec], col = 'red')
+  lines(train_X_latest_mean_by_pos_fixed[vec], lm1.fit_scale_down[outlier_sel][vec], col = 'blue')
+}
+```
+Next we try the Fourier Analysis of the training data.
+First, we construct the cos and sin lists.
+```{r}
+w<-2*pi/52.2
+Nfourier<-20
+for(i in c(1:Nfourier))
+{
+  assign(paste("cos", i, sep=""),cos(w*train_X$TIME*i))
+  assign(paste("sin", i, sep=""),sin(w*train_X$TIME*i))
+}
+```
+Next we insert the cos and sin in the data frame.
+```{r}
+cos<-paste('cos',c(1:Nfourier),sep="",collapse=",")                         
+sin<-paste('sin',c(1:Nfourier),sep="",collapse=",")
+paste("data.frame(train_X,",cos,",",sin,")",sep="")
+train_X_fourier<-eval(parse(text=paste("data.frame(train_X,",cos,",",sin,")",sep="")))
+names(train_X_fourier)
+```
+Then we can do the Fourier Regression.
+```{r}
+lm.fourier<-list()
+eq<-list()
+for(i in c(1:Nfourier))
+{
+  cos<-paste(c('cos'),c(1:i),sep="")
+  sin<-paste(c('sin'),c(1:i),sep="")
+  fourier<-paste(c(cos,sin),collapse="+")
+  eq[[i]]<-as.formula(paste("VALUE~",fourier,sep=""))
+  lm.fourier[[i]]<-lm(eq[[i]],data=train_X_fourier[which(train_X_fourier$MODEL==0),])
+}
+
+length(lm.fourier)
+
+lapply(lm.fourier, summary)
+```
+Finally we can do some analysis on the trained model.
+```{r}
+adjR<-function(x)
+{
+  summary(x)$adj.r.squared
+}
+
+unlist(lapply(lm.fourier,adjR))
+sel<-list()
+sel[[1]] <- which(train_X$MODEL==0&train_X$POSITION==0&train_X$DATASET==0)
+
+sel[[2]] <- which(train_X$MODEL==0&train_X$POSITION==1&train_X$DATASET==0)
+sel[[3]] <- which(train_X$MODEL==0&train_X$POSITION==2&train_X$DATASET==0)
+sel[[4]] <- which(train_X$MODEL==0&train_X$POSITION==3&train_X$DATASET==0)
+par(mfrow = c(2,1))
+plot(1:10, train_X[sel[[1]], ]$VALUE, type='l',lwd=2)
+lines(lm.fourier[[20]]$fitted[sel[[1]]],col='red', lwd=2)
+plot(1:10, train_X[sel[[2]], ]$VALUE, type='l',lwd=2)
+lines(lm.fourier[[20]]$fitted[sel[[2]]],col='red', lwd=2)
+par(mfrow = c(2, 1))
+plot(1:10, train_X[sel[[3]], ]$VALUE, type='l',lwd=2)
+lines(lm.fourier[[20]]$fitted[sel[[3]]],col='red', lwd=2)
+plot(1:10, train_X[sel[[4]], ]$VALUE, type='l',lwd=2)
+lines(lm.fourier[[20]]$fitted[sel[[4]]],col='red', lwd=2)
+```
+
+Testing with GAM, approach naive (i.e. Gaussian).
+```{r}
+all_gam1 <- paste("s(M0Y", c(0:9), ")",sep="",collapse="+")
+form_gam1 <- as.formula(paste("Y~",all_gam1, sep=""))
+gam1 <- gam(form_gam1, data = X)
+
+all_gam2 <- paste("s(M", rep(c(0:5),10), "Y", rep(c(0:9), each=6), ")",sep="",collapse = "+")
+form_gam2 <- as.formula(paste("Y~", all_gam2, sep=""))
+gam2 <- gam(form_gam2, data = X)
+
+form_gam3 <- as.formula(paste("Y~", all_gam2, "+s(LON)+s(LAT)", sep=""))
+gam3 <- gam(form_gam3, data = X)
+
+summary(gam1)
+summary(gam2)
+summary(gam3)
+```
+
+```{r}
+all_gam4 <- paste("s(M", rep(c(0:22), 10), "Y", rep(c(0:9),each=23),")",sep="", collapse="+")
+all_gam42 <- paste("s(M", c(1:22), "Y10)", sep="", collapse="+")
+form_gam4 <- as.formula(paste("Y~", all_gam3, "+", all_gam32, sep=""))
+gam4 <- gam(form_gam4, data = X)
+
+
+summary(gam4)
+```
+
+To improve the performance, we try to use GEV instead of Gaussian.
+```{r}
+all_gev1 <- paste("s(M0Y", c(0:9), ")",sep="",collapse="+")
+form_mu_gev1 <- as.formula(paste("Y~", all_gev1, sep=""))
+form_sigma_gev1 <- as.formula(paste("~ ",all_gev1, sep=""))
+m1 <- gam(list(Y~s(LON)+s(LAT)+s(M0Y9),
+          ~s(LON)+s(LAT)+s(M0Y9),
+          ~ 1), data=X, method="REML", family = gevlss)
+
+summary(m1)
+```
+
+
+
+
+
+
+
+
