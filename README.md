@@ -56,6 +56,6 @@ I believe there should be a lot to improve on my current result.
 <ul>
 <li>Try a different criterion for the selection of the models.</li>
 <li>Use other methods with the variables obtained.</li>
-<li>Use the probabilistic forecasting method introduced in <https://www.nature.com/articles/s41467-018-05442-8>.</li>
+<li>Use the probabilistic forecasting method introduced in https://www.nature.com/articles/s41467-018-05442-8.</li>
 </ul>
 
