@@ -15,13 +15,13 @@
 
 [7. Possible Improvements](#Improv)
 
-<a name="Intro">
+<a name="Intro"/>
  
 ## 1. Intoduction
 
 This is a class project I made aiming to solve the [Regional CLimate Forecasting challenge](https://challengedata.ens.fr/participants/challenges/80/) on challengedata. I've ended up with 4th place on the public scoreboard and 1st place on the private one. Here I will give the idea of the solution and possible ways to improve my solution.
 
-<a name="#Challenge">
+<a name="#Challenge"/>
  
 ## 2. Brief Introduction to the challenge
 
@@ -29,7 +29,7 @@ The goal is to predict regional temperature anomaly given the data of the last 1
 
 The regions are given by the nested Healpix(one may check [link](https://en.wikipedia.org/wiki/HEALPix) for the disctription of Healpix), which is a way to partition the global into smaller zones. Here we will partition into 3072 regions.
 
-<a name="#Goal">
+<a name="#Goal"/>
  
 ## 3. Goal of the challenge
 
@@ -41,13 +41,13 @@ The output should have the same number of rows as of $Y$, and each row with two 
 
 The goal is thus to predict $Y$ given $X$ so that both the prediction is close and the variance is low.
 
-<a name="#Mark">
+<a name="#Mark"/>
  
 ## 4. Benchmark
 
 The benchmark of this challenge is the loss obtained by taking the last observed data $MY_{0, 9}$ as prediction which is -1.139 on the public dataset and -1.212 on the private data set.
 
-<a name="#Idea">
+<a name="#Idea"/>
  
 ## 5. Idea
 
@@ -61,7 +61,7 @@ To do this, we will calculate the loss seperately for each dataset, so that we w
 
 Unfortunately, after some tries I cannot improve the results better than the pure mean of the models 0, 5, 8. 
 
-<a name="#Rank">
+<a name="#Rank"/>
  
 ## 6. Ranking
 
@@ -77,7 +77,7 @@ On private ranking,
  <li>Linear Regression with PCA scored -0.761</li>
 </ul>
 
-<a name="#Improv">
+<a name="#Improv"/>
  
 ## 7. Possible Improvements
 
