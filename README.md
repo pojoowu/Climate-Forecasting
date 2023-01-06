@@ -39,12 +39,16 @@ Unfortunately, after some tries I cannot improve the results better than the pur
 ## 6. Ranking
 
 On public ranking, here we only consider the data of models 0, 5, 8
-Mean scored -1.014
-Linear Regression with PCA scored -1.061
-Linear Regression without PCA scored 
+<ul>
+<li>Mean scored -1.014</li>
+<li>Linear Regression with PCA scored -1.061</li>
+<li>Linear Regression without PCA scored</li>
+</ul>
 On private ranking,
-Mean scored -0.750
-Linear Regression with PCA scored -0.761
+<ul>
+ <li>Mean scored -0.750</li>
+ <li>Linear Regression with PCA scored -0.761</li>
+</ul>
 
 ## 7. Possible Improvements
 
@@ -52,6 +56,6 @@ I believe there should be a lot to improve on my current result.
 <ul>
 <li>Try a different criterion for the selection of the models.</li>
 <li>Use other methods with the variables obtained.</li>
-<li>Use the probabilistic forecasting method introduced [here](https://www.nature.com/articles/s41467-018-05442-8).</li>
+<li>Use the probabilistic forecasting method introduced in <https://www.nature.com/articles/s41467-018-05442-8>.</li>
 </ul>
 
